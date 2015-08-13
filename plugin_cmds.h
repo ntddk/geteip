@@ -1,7 +1,7 @@
 {
-	.name		= "do_geteip",
-	.args_type	= "procname:s?",
-	.mhandler.cmd	= do_geteip,
-	.params		= "[procname]",
-	.help		= "Run the tests with program [procname]"
+        .name           = "geteip",
+        .args_type      = "procname:s?",
+        .mhandler.cmd   = do_monitor_proc,
+        .params         = "[procname]",
+        .help           = "tracking EIP of [procname] as block"
 },

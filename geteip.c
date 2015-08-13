@@ -82,13 +82,7 @@ static void geteip_cleanup(void)
 
 static mon_cmd_t geteip_term_cmds[] = 
 {
-        {
-                .name           = "geteip",
-                .args_type      = "procname:s?",
-                .mhandler.cmd   = do_monitor_proc,
-                .params         = "[procname]",
-                .help           = "tracking EIP of [procname] as block"
-        },
+#include "plugin_cmds.h"
         {NULL, NULL, },
 };
 
