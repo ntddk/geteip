@@ -1,0 +1,6 @@
+config-plugin.h
+config-plugin.mak
+*.a
+*.d
+*.o
+*.so
