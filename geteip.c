@@ -5,13 +5,40 @@
 #include "vmi_callback.h"
 #include "utils/Output.h"
 #include "DECAF_target.h"
-#include <xed-interface.h>
+#include "hookapi.h"
 
 static plugin_interface_t geteip_interface;
 static DECAF_Handle processbegin_handle = DECAF_NULL_HANDLE;
 static DECAF_Handle blockbegin_handle = DECAF_NULL_HANDLE;
+static DECAF_Handle isdebuggerpresent_handle = DECAF_NULL_HANDLE;
 char targetname[512];
 uint32_t target_cr3;
+
+typedef struct {
+        uint32_t call_stack[1]; //paramters and return address
+        DECAF_Handle hook_handle;
+} IsDebuggerPresent_hook_context_t;
+
+/*
+ * BOOL IsDebuggerPresent(VOID);
+ */
+
+static void IsDebuggerPresent_ret(void *param)
+{
+        IsDebuggerPresent_hook_context_t *ctx = (IsDebuggerPresent_hook_context_t *)param;
+        hookapi_remove_hook(ctx->hook_handle);
+        DECAF_printf("EIP = %08x, EAX = %d\n", cpu_single_env->eip, cpu_single_env->regs[R_EAX]);
+        free(ctx);
+}
+
+static void IsDebuggerPresent_call(void *opaque)
+{
+        DECAF_printf("IsDebuggerPresent ");
+        IsDebuggerPresent_hook_context_t *ctx = (IsDebuggerPresent_hook_context_t*)malloc(sizeof(IsDebuggerPresent_hook_context_t));
+        if(!ctx) return;
+        DECAF_read_mem(NULL, cpu_single_env->regs[R_ESP], 4, ctx->call_stack);
+        ctx->hook_handle = hookapi_hook_return(ctx->call_stack[0], IsDebuggerPresent_ret, ctx, sizeof(*ctx));
+}
 
 static void geteip_block_begin_callback(DECAF_Callback_Params* params)
 {
@@ -19,7 +46,7 @@ static void geteip_block_begin_callback(DECAF_Callback_Params* params)
         {
                 target_ulong eip = params->bb.env->eip; 
                 target_ulong eax = params->bb.env->regs[R_EAX]; 
-                DECAF_printf("EIP = 0x%08x, EAX = 0x%08x\n", eip, eax);
+                // DECAF_printf("EIP = 0x%08x, EAX = 0x%08x\n", eip, eax);
         }
 }
 
@@ -29,6 +56,7 @@ static void geteip_loadmainmodule_callback(VMI_Callback_Params* params)
         {
                 DECAF_printf("Process %s you spcecified starts \n", params->cp.name);
                 target_cr3 = params->cp.cr3;
+                isdebuggerpresent_handle = hookapi_hook_function_byname("kernel32.dll", "IsDebuggerPresent", 1, target_cr3, IsDebuggerPresent_call, NULL, 0);
                 blockbegin_handle = DECAF_register_callback(DECAF_BLOCK_BEGIN_CB, &geteip_block_begin_callback, NULL);
         }
 }
@@ -47,7 +75,7 @@ static int geteip_init(void)
         processbegin_handle = VMI_register_callback(VMI_CREATEPROC_CB, &geteip_loadmainmodule_callback, NULL);
         if (processbegin_handle == DECAF_NULL_HANDLE)
                 DECAF_printf("Could not register for the create or remove proc events\n");  
-        return (0);
+        return 0;
 }
 
 static void geteip_cleanup(void)
