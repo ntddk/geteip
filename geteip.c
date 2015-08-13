@@ -18,8 +18,8 @@ static void geteip_block_begin_callback(DECAF_Callback_Params* params)
 {
         if(params->bb.env->cr[3] == target_cr3)
         {
-                uint32_t eip = cpu_single_env->eip;
-                uint32_t eax = cpu_single_env->regs[R_EAX];
+                target_ulong eip = params->bb.env->eip; 
+                target_ulong eax = params->bb.env->regs[R_EAX]; 
 
                 DECAF_printf("EIP = 0x%08x, EAX = 0x%08x\n", eip, eax);
         }
