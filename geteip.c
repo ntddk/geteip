@@ -6,13 +6,16 @@
 #include "utils/Output.h"
 #include "DECAF_target.h"
 #include "hookapi.h"
+#include <time.h>
 
 static plugin_interface_t geteip_interface;
 static DECAF_Handle processbegin_handle = DECAF_NULL_HANDLE;
+static DECAF_Handle removeproc_handle = DECAF_NULL_HANDLE;
 static DECAF_Handle blockbegin_handle = DECAF_NULL_HANDLE;
 static DECAF_Handle isdebuggerpresent_handle = DECAF_NULL_HANDLE;
 char targetname[512];
 uint32_t target_cr3;
+clock_t start, end;
 
 typedef struct {
         uint32_t call_stack[1]; //paramters and return address
@@ -46,7 +49,7 @@ static void geteip_block_begin_callback(DECAF_Callback_Params* params)
         {
                 target_ulong eip = params->bb.env->eip; 
                 target_ulong eax = params->bb.env->regs[R_EAX]; 
-                // DECAF_printf("EIP = 0x%08x, EAX = 0x%08x\n", eip, eax);
+                DECAF_printf("\rEIP = 0x%08x, EAX = 0x%08x", eip, eax);
         }
 }
 
@@ -54,10 +57,23 @@ static void geteip_loadmainmodule_callback(VMI_Callback_Params* params)
 {
         if(strcmp(params->cp.name,targetname) == 0)
         {
+                start = clock();
                 DECAF_printf("Process %s you spcecified starts \n", params->cp.name);
+                DECAF_printf("Start time: %d\n", start);
                 target_cr3 = params->cp.cr3;
                 isdebuggerpresent_handle = hookapi_hook_function_byname("kernel32.dll", "IsDebuggerPresent", 1, target_cr3, IsDebuggerPresent_call, NULL, 0);
                 blockbegin_handle = DECAF_register_callback(DECAF_BLOCK_BEGIN_CB, &geteip_block_begin_callback, NULL);
+        }
+}
+
+static void geteip_removeproc_callback(VMI_Callback_Params* params)
+{
+        if(strcmp(params->cp.name,targetname) == 0)
+        {
+                end = clock();
+                DECAF_printf("Process %s you specified ends \n", params->cp.name);
+                DECAF_printf("End time: %d\n", end);
+                DECAF_printf("Processing time: %d[ms]\n", end - start);
         }
 }
 
@@ -72,19 +88,29 @@ void do_monitor_proc(Monitor* mon, const QDict* qdict)
 static int geteip_init(void)
 {
         DECAF_printf("Hello, World!\n");
+        // DECAF_disable_tb_chaining();
         processbegin_handle = VMI_register_callback(VMI_CREATEPROC_CB, &geteip_loadmainmodule_callback, NULL);
         if (processbegin_handle == DECAF_NULL_HANDLE)
-                DECAF_printf("Could not register for the create or remove proc events\n");  
+                DECAF_printf("Could not register for the create proc events\n");
+        removeproc_handle = VMI_register_callback(VMI_REMOVEPROC_CB, &geteip_removeproc_callback, NULL);
+        if (removeproc_handle == DECAF_NULL_HANDLE)
+                DECAF_printf("Could not register for the remove proc events\n");
         return 0;
 }
 
 static void geteip_cleanup(void)
 {
         DECAF_printf("Bye, World\n");
+        // DECAF_enable_tb_chaining();
         if (processbegin_handle != DECAF_NULL_HANDLE)
         {
                 VMI_unregister_callback(VMI_CREATEPROC_CB, processbegin_handle);  
                 processbegin_handle = DECAF_NULL_HANDLE;
+        }
+        if (removeproc_handle != DECAF_NULL_HANDLE)
+        {
+                VMI_unregister_callback(VMI_REMOVEPROC_CB, removeproc_handle);
+                removeproc_handle = DECAF_NULL_HANDLE;
         }
         if (blockbegin_handle != DECAF_NULL_HANDLE)
         {
